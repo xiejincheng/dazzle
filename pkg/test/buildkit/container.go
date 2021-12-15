@@ -5,12 +5,14 @@ import (
 	"os"
 	"strings"
 
+	"github.com/containerd/console"
 	"github.com/gitpod-io/dazzle/pkg/test"
 	"github.com/gitpod-io/dazzle/pkg/test/runner"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth/authprovider"
+	"github.com/moby/buildkit/util/progress/progressui"
 	ociv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -82,6 +84,19 @@ func (b *Executor) Run(ctx context.Context, spec *test.Spec) (rr *test.RunResult
 		return nil
 	})
 	eg.Go(func() error {
+		// https://github.com/moby/buildkit/blob/master/examples/build-using-dockerfile/main.go#L105-L111
+		var c console.Console
+		if cn, err := console.ConsoleFromFile(os.Stderr); err == nil {
+			c = cn
+		}
+		// not using shared context to not disrupt display but let is finish reporting errors
+		err = progressui.DisplaySolveStatus(context.TODO(), "", c, os.Stdout, ch)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	eg.Go(func() error {
 		var b []byte
 		defer func() {
 			rchan <- b
@@ -101,6 +116,7 @@ func (b *Executor) Run(ctx context.Context, spec *test.Spec) (rr *test.RunResult
 				return nil
 			}
 		}
+
 	})
 	err = eg.Wait()
 	if err != nil {
